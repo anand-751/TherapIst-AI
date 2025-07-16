@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { jsonrepair } from 'jsonrepair';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 import { Mic, MicOff, Brain, Clock, MessageCircle, FileText, Zap, Heart, Activity, Shield, Cpu, Waves } from 'lucide-react';
 
 const AITherapist = () => {
@@ -22,6 +24,9 @@ const AITherapist = () => {
   const synthRef = useRef(null);
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
+
+  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+
 
   const questions = [
     "Hello! I'm your AI therapist. How have you been feeling emotionally this past week?",
@@ -261,7 +266,6 @@ Session Data:
 ${responses.map((r, i) => `Q${i + 1}: ${r.question}
 Answer: ${r.answer}`).join('\n')}
 
-
 Now return your analysis in the following JSON format (write full paragraphs):
 
 \`\`\`json
@@ -288,49 +292,24 @@ Now return your analysis in the following JSON format (write full paragraphs):
 `;
 
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a licensed clinical psychologist with expertise in CBT, neuroscience, and emotional regulation. You provide structured, evidence-based mental health assessments and therapeutic guidance. Speak like a compassionate doctor writing a patient’s post-session report.`
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 1500
-        })
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
       });
 
-      if (!response.ok) throw new Error('Failed to generate report');
+      const text = result.response.text();
+      setRawReportText(text);
 
-      const data = await response.json();
-      const reportText = data.choices?.[0]?.message?.content || '';
+      const jsonMatch = text.match(/```json([\s\S]*?)```/);
+      const jsonText = jsonMatch ? jsonMatch[1].trim() : text;
 
-      // Save raw text in case parsing fails
-      setRawReportText(reportText);
-
-      // Try to extract JSON block
-      const jsonMatch = reportText.match(/```json([\s\S]*?)```/);
-      const jsonText = jsonMatch ? jsonMatch[1].trim() : reportText;
-
-      // Try to parse the JSON
       const parsedReport = JSON.parse(jsonrepair(jsonText));
       setReport(parsedReport);
-    } catch (error) {
-      console.error('Report generation error:', error);
 
-      // Don't overwrite with generic fallback — rely on rawReportText display
-      setReport(null); // Allow conditional UI to show raw fallback
+    } catch (error) {
+      console.error('Gemini Report Error:', error);
+      setReport(null);
     } finally {
       setSystemStatus('REPORT_READY');
       setIsGeneratingReport(false);
