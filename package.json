@@ -4,7 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "homepage": "https://anand-751.github.io/TherapIst-AI",
-
   "scripts": {
     "dev": "vite",
     "build": "vite build",
